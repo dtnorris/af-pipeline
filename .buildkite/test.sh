@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/af-pipeline-ci.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
+scratch="$(cd "$scratch" && pwd -P)"
 mkdir "$scratch/tmp"
 
 export BUNDLE_FROZEN=true GIT_OPTIONAL_LOCKS=0
