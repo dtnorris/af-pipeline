@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require_relative "test_helper"
-require "stringio"
 
 # Real storage-to-public-retrieval handoff using generated mechanical bytes.
 # No inference, scoring result, private archive, Git fixture or validator fake.
@@ -10,26 +9,22 @@ class EvidenceOwnerIntegrationTest < Minitest::Test
   RAW = "mechanical/runs/job/native/raw/ADV-TEST/run-one"
   BINARY = (0..255).to_a.pack("C*") + "\0\xff".b
 
-  # Supplies isolated source, canonical archive and opt-in operational output.
-  # Restores caller authorization and removes only this test's generated world.
+  # Yields an isolated source, canonical archive and operational output root.
+  # Removes the generated world after the block. Filesystem errors propagate.
   def with_world
-    previous = ENV.delete("AF_DATA_PIPELINE_DATA_ROOT")
     Dir.mktmpdir("pl-ev-handoff-", File.realpath(Dir.tmpdir)) do |world|
       source = File.join(world, "source")
-      response = File.join(world, "response")
+      archive = File.join(world, "archive")
       selected = File.join(world, "selected")
-      FileUtils.mkdir_p([source, response, selected])
+      FileUtils.mkdir_p([source, archive, selected])
       write_member(source, "mechanical/runs/job/metadata.json", JSON.generate(
         "job_id" => "job", "adventure" => "ADV-TEST", "dimension" => "mechanical", "status" => "complete"))
       write_member(source, "#{RAW}/run_metadata.json", JSON.generate(
         "run_id" => "run-one", "adventure_id" => "ADV-TEST", "selected_dimension" => "mechanical"))
       write_member(source, "#{RAW}/binary.bin", BINARY)
       write_member(source, "#{RAW}/empty.bin", "")
-      yield world, source, response, selected
+      yield world, source, archive, selected, File.join(world, "evidence-index.sqlite")
     end
-  ensure
-    ENV.delete("AF_DATA_PIPELINE_DATA_ROOT")
-    ENV["AF_DATA_PIPELINE_DATA_ROOT"] = previous if previous
   end
 
   # Writes exact fixture bytes; filesystem failures propagate.
@@ -39,138 +34,163 @@ class EvidenceOwnerIntegrationTest < Minitest::Test
     File.binwrite(path, bytes)
   end
 
-  # Publishes through the actual PL writer and real EV validators.
-  def publish(source, response, authoritative: false)
-    AfDataPipeline::ProductionEvidenceShadowWriter.write!(
-      batch_id: BATCH, source_root: source, response_root: response, authoritative: authoritative)
+  # Returns exact published pair and index bytes. Filesystem errors propagate.
+  def stored_bytes(pair, index)
+    paths = pair.values_at("manifest", "bundle").map { |item| item.fetch("path") }
+    (paths + [index]).to_h { |path| [path, File.binread(path)] }
   end
 
-  # Invokes the public retrieval dispatcher with explicit archive/index locators.
-  # Returns status, parsed-or-raw stdout, and stderr without replacing any owner.
-  def retrieve(response, output, member: "binary.bin")
-    out = StringIO.new
-    err = StringIO.new
-    status = AfDataPipeline::CLI.run([
-      "evidence-retrieve", "--index", File.join(response, "indexes/evidence-index.sqlite"),
-      "--evidence-root", File.join(response, "prod-evidence"), "--run-id", "run-one",
+  # Runs the public executable for one member and returns exit status, summary
+  # and stderr. Spawn errors and malformed summary JSON propagate.
+  def retrieve(archive, index, output, data_root:, member: "binary.bin")
+    stdout, stderr, status = Open3.capture3(
+      {"AF_DATA_PIPELINE_DATA_ROOT" => data_root}, RbConfig.ruby, File.expand_path("../bin/af-data", __dir__),
+      "evidence-retrieve", "--index", index, "--evidence-root", archive, "--run-id", "run-one",
       "--member-path", "#{RAW}/#{member}", "--output", output
-    ], out: out, err: err)
-    [status, out.string.empty? ? nil : JSON.parse(out.string), err.string]
+    )
+    [status.exitstatus, stdout.empty? ? nil : JSON.parse(stdout), stderr]
   end
 
-  # Proves exact binary/empty retrieval and repeat semantics, with authoritative
-  # and diagnostic policy preserved and unchanged EV implementation provenance.
-  def test_writer_and_public_dispatcher_share_the_ev_owner
-    with_world do |world, source, response, _selected|
-      first = publish(source, response)
-      assert_equal "complete", first.fetch("status")
-      assert_equal "shadow_dual_write", first.fetch("mode")
-      assert_equal false, first.fetch("authoritative")
-      assert_equal "valid", first.dig("equivalence_gate", "status")
+  # Proves exact binary/empty retrieval, verified pair reuse and owner provenance.
+  def test_public_retrieval_of_verified_owner_store
+    with_world do |_world, source, archive, selected, index|
+      inputs = {batch_id: BATCH, source_root: source, evidence_root: archive, index_path: index}
+      store = AfEvidence::EvidenceStore.new(**inputs)
+      pair = store.ensure_pair!
+      assert_equal true, pair.fetch("source_verified")
+      assert_equal 4, pair.fetch("member_count")
+      assert_equal true, store.rebuild_index!.fetch("verified")
+      before = stored_bytes(pair, index)
+      equivalence = AfEvidence::EvidenceEquivalenceChecker.new(**inputs).verify!
+      assert_equal AfEvidence::EvidenceEquivalenceChecker::CHECK_NAMES, equivalence.checks.keys
+      assert_equal %w[pass pass pass pass], equivalence.checks.values.map { |check| check.fetch("status") }
       {"binary.bin" => BINARY, "empty.bin" => "".b}.each do |member, bytes|
-        output = File.join(world, member)
-        status, summary, error = retrieve(response, output, member: member)
+        output = File.join(selected, member)
+        status, summary, error = retrieve(archive, index, output, data_root: selected, member:)
         assert_equal 0, status, error
         assert_empty error
         assert_equal bytes, File.binread(output)
         assert_equal Digest::SHA256.hexdigest(bytes), summary.fetch("sha256")
       end
-      second = publish(source, response, authoritative: true)
-      assert_equal "complete", second.fetch("status")
-      assert_equal "compact_canonical", second.fetch("mode")
-      assert_equal true, second.fetch("authoritative")
-      assert_equal first.fetch("canonical_batch"), second.fetch("canonical_batch")
+      assert_equal pair, AfEvidence::EvidenceStore.new(**inputs).ensure_pair!
+      assert_equal before, stored_bytes(pair, index)
       assert_equal AfEvidence::EvidenceBundleBuilder, AfDataPipeline::EvidenceBundleBuilder.superclass
       assert_equal AfEvidence::EvidenceRetriever, AfDataPipeline::EvidenceRetriever.superclass
       assert_equal AfEvidence::EvidenceIndexBuilder::SCHEMA_PATH, AfDataPipeline::EvidenceIndexBuilder::SCHEMA_PATH
     end
   end
 
-  # Refuses absent/relative/traversing archive selections before PL can normalize
-  # them into an unintended archive; neither archive receives any output.
-  def test_writer_refuses_unsafe_archive_selection_before_writes
-    with_world do |world, source, response, selected|
-      invalid_roots = [nil, "", "response", "#{response}/.", "#{response}/../selected", "#{response}\0"]
-      invalid_roots.each do |archive|
-        error = assert_raises(AfDataPipeline::ValidationError) { publish(source, archive) }
-        assert_match(/archive root must be an explicit absolute path without traversal/, error.message)
-        assert_empty Dir.children(response)
+  # Confirms the public store refuses unsafe archive selections before writes.
+  def test_store_refuses_unsafe_archive_selection_before_writes
+    with_world do |world, source, archive, selected, index|
+      inputs = {batch_id: BATCH, source_root: source, index_path: index}
+      invalid_roots = [nil, "", "archive", "#{archive}/.", "#{archive}/../selected"]
+      invalid_roots.each do |root|
+        error = assert_raises(AfEvidence::ValidationError) do
+          AfEvidence::EvidenceStore.new(**inputs, evidence_root: root).ensure_pair!
+        end
+        assert_match(/explicit absolute paths without traversal/, error.message)
+        assert_empty Dir.children(archive)
         assert_empty Dir.children(selected)
       end
-      assert_equal %w[selected response source].sort, Dir.children(world).sort
+      error = assert_raises(ArgumentError) do
+        AfEvidence::EvidenceStore.new(**inputs, evidence_root: "#{archive}\0").ensure_pair!
+      end
+      assert_match(/null byte/, error.message)
+      assert_empty Dir.children(archive)
+      assert_empty Dir.children(selected)
+      assert_equal %w[archive selected source], Dir.children(world).sort
       assert_equal BINARY, File.binread(File.join(source, "#{RAW}/binary.bin"))
     end
   end
 
-  # Exercises legacy/default and opt-in refusals through the same dispatcher.
-  # A selected PL root authorizes placement only; EV still refuses unsafe output.
+  # Checks the executable's required root and both layers of output validation.
   def test_selected_root_and_ev_safety_both_remain_required
-    with_world do |world, source, response, selected|
-      publish(source, response)
-      ENV["AF_DATA_PIPELINE_DATA_ROOT"] = selected
+    with_world do |world, source, archive, selected, index|
+      store = AfEvidence::EvidenceStore.new(batch_id: BATCH, source_root: source, evidence_root: archive, index_path: index)
+      pair = store.ensure_pair!
+      store.rebuild_index!
+      before = stored_bytes(pair, index)
+      output = File.join(selected, "selected.bin")
+      status, summary, error = retrieve(archive, index, output, data_root: nil)
+      assert_equal 2, status
+      assert_nil summary
+      assert_match(/set AF_DATA_PIPELINE_DATA_ROOT/, error)
+      refute File.exist?(output)
       outside = File.join(world, "outside")
-      status, summary, error = retrieve(response, outside)
+      status, summary, error = retrieve(archive, index, outside, data_root: selected)
       assert_equal 2, status
       assert_nil summary
       assert_match(/escapes private data root/, error)
       refute File.exist?(outside)
-      output = File.join(selected, "selected.bin")
-      assert_equal 0, retrieve(response, output).first
+      archive_output = File.join(archive, "retrieved.bin")
+      status, summary, error = retrieve(archive, index, archive_output, data_root: world)
+      assert_equal 2, status
+      assert_nil summary
+      assert_match(/outside the canonical evidence root/, error)
+      refute File.exist?(archive_output)
+      assert_equal 0, retrieve(archive, index, output, data_root: selected).first
       assert_equal BINARY, File.binread(output)
-      status, _summary, error = retrieve(response, output)
+      status, _summary, error = retrieve(archive, index, output, data_root: selected)
       assert_equal 2, status
       assert_match(/already exists/, error)
       assert_equal BINARY, File.binread(output)
-      ENV["AF_DATA_PIPELINE_DATA_ROOT"] = ""
-      status, _summary, error = retrieve(response, File.join(selected, "no-fallback"))
+      missing = File.join(selected, "no-fallback")
+      status, _summary, error = retrieve(archive, index, missing, data_root: "")
       assert_equal 2, status
       assert_match(/empty or contains traversal/, error)
-      ENV.delete("AF_DATA_PIPELINE_DATA_ROOT")
-      link = File.join(world, "dangling")
-      File.symlink(File.join(world, "absent"), link)
-      status, _summary, error = retrieve(response, link)
+      refute File.exist?(missing)
+      link = File.join(selected, "dangling")
+      target = File.join(selected, "absent")
+      File.symlink(target, link)
+      status, _summary, error = retrieve(archive, index, link, data_root: selected)
       assert_equal 2, status
       assert_match(/symlink/, error)
-      assert File.symlink?(link)
+      assert_equal target, File.readlink(link)
+      refute File.exist?(target)
+      assert_equal before, stored_bytes(pair, index)
     end
   end
 
-  # Conflicting replay cannot replace a canonical identity or claim completion;
-  # real EV validation is translated back to the existing PL exception identity.
+  # Conflicting replay preserves published bytes and the public PL verifier maps
+  # the owner's real source mismatch to the pipeline exception identity.
   def test_conflicting_replay_retains_canonical_pair_and_pipeline_error_identity
-    with_world do |_world, source, response, _selected|
-      state = publish(source, response)
-      pair = state.fetch("canonical_batch").values_at("manifest", "bundle").to_h do |item|
-        [item.fetch("path"), File.binread(item.fetch("path"))]
-      end
+    with_world do |_world, source, archive, _selected, index|
+      store = AfEvidence::EvidenceStore.new(batch_id: BATCH, source_root: source, evidence_root: archive, index_path: index)
+      pair = store.ensure_pair!
+      store.rebuild_index!
+      before = stored_bytes(pair, index)
       File.binwrite(File.join(source, "#{RAW}/binary.bin"), "conflict")
-      error = assert_raises(AfDataPipeline::ValidationError) { publish(source, response) }
-      assert_equal "AfDataPipeline::ValidationError", error.class.name
-      assert_match(/source member byte size mismatch/, error.message)
-      pair.each { |path, bytes| assert_equal bytes, File.binread(path) }
+      owner_error = assert_raises(AfEvidence::ValidationError) { store.ensure_pair! }
+      assert_match(/source member byte size mismatch/, owner_error.message)
+      pipeline_error = assert_raises(AfDataPipeline::ValidationError) do
+        AfDataPipeline::EvidenceBundleVerifier.new.verify!(manifest_path: pair.dig("manifest", "path"),
+          bundle_path: pair.dig("bundle", "path"), source_root: source)
+      end
+      assert_equal owner_error.message, pipeline_error.message
+      assert_equal before, stored_bytes(pair, index)
     end
   end
 
-  # A source change at the equivalence handoff returns the existing failed receipt
-  # shape, including the PL Failure identity, without weakening owner checks.
-  def test_equivalence_failure_remains_a_failed_non_authoritative_receipt
-    with_world do |_world, source, response, _selected|
-      progress = lambda do |message|
-        if message.include?("running production equivalence gate")
-          File.binwrite(File.join(source, "#{RAW}/binary.bin"), "changed at handoff")
-        end
+  # A source change after publication fails mechanical equivalence and preserves
+  # both the published evidence and the changed expanded input for inspection.
+  def test_equivalence_refuses_changed_source_and_preserves_published_evidence
+    with_world do |_world, source, archive, _selected, index|
+      inputs = {batch_id: BATCH, source_root: source, evidence_root: archive, index_path: index}
+      store = AfEvidence::EvidenceStore.new(**inputs)
+      pair = store.ensure_pair!
+      store.rebuild_index!
+      before = stored_bytes(pair, index)
+      member = File.join(source, "#{RAW}/binary.bin")
+      File.binwrite(member, "changed at handoff")
+      failure = assert_raises(AfEvidence::EvidenceEquivalenceChecker::Failure) do
+        AfEvidence::EvidenceEquivalenceChecker.new(**inputs).verify!
       end
-      state = AfDataPipeline::ProductionEvidenceShadowWriter.write!(
-        batch_id: BATCH, source_root: source, response_root: response, authoritative: true, progress: progress)
-      assert_equal "failed", state.fetch("status")
-      assert_equal false, state.fetch("authoritative")
-      assert_equal true, state.fetch("requested_authoritative")
-      assert_equal false, state.fetch("representation_valid")
-      assert_equal "AfDataPipeline::ProductionEvidenceEquivalenceGate::Failure", state.fetch("error_class")
-      assert_equal "invalid", state.dig("equivalence_gate", "status")
-      assert_equal "fail", state.dig("equivalence_gate", "checks", "expanded_manifest_inventory", "status")
-      assert File.file?(state.dig("canonical_batch", "bundle", "path"))
-      assert_equal "changed at handoff", File.binread(File.join(source, "#{RAW}/binary.bin"))
+      assert_match(/expanded evidence differs from manifest/, failure.message)
+      assert_includes failure.message, "#{RAW}/binary.bin"
+      assert_equal %w[fail not_run not_run not_run], failure.checks.values.map { |check| check.fetch("status") }
+      assert_equal before, stored_bytes(pair, index)
+      assert_equal "changed at handoff", File.binread(member)
     end
   end
 end

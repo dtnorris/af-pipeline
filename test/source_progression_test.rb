@@ -24,7 +24,7 @@ class SourceProgressionTest < Minitest::Test
   end
 
   def setup
-    @tmpdir = Dir.mktmpdir("source-progression")
+    @tmpdir = Dir.mktmpdir("source-progression", File.realpath(Dir.tmpdir))
     @source_root = File.join(@tmpdir, "source")
     @catalog_root = File.join(@tmpdir, "catalog")
     @pipeline_root = File.join(@tmpdir, "pipeline")
@@ -189,13 +189,19 @@ class SourceProgressionTest < Minitest::Test
 
   def test_non_ready_conversion_remains_a_human_gate_without_side_effects
     write_receipt(state: "needs_page_review", downstream_ready: false)
+    receipt = JSON.parse(File.binread(@receipt))
+    receipt["extraction_quality"] = {"issues" => [{"page" => 1, "fingerprint" => "f" * 64}]}
+    receipt["unresolved_issue_fingerprints"] = ["f" * 64]
+    write_json(@receipt, receipt)
     operation = write_operation(@receipt, canonical: nil, revision: 1)
-    result = advance(@receipt, operation, canonical_destination: @canonical)
+    executor = ->(*) { flunk "page review must not execute a continuation" }
+    result = advance(@receipt, operation, canonical_destination: @canonical, executor:)
 
     assert_equal "GATE", result.status
     assert_equal "NEEDS_PAGE_REVIEW", result.state
     refute File.exist?(@canonical)
     assert_empty result.outputs
+    assert_empty Dir.children(@pipeline_root)
   end
 
   def test_public_cli_emits_versioned_results_and_errors
@@ -333,22 +339,23 @@ class SourceProgressionTest < Minitest::Test
     operation = write_operation(dossier, revision: 3)
     public_root = ENV.fetch("AF_PUBLIC_SPEC_ROOT", File.expand_path("../../af-specification-md", __dir__))
     expected = AfDataPipeline::EditorialSpecifications.bind!(public_root)
+    environment = {"AF_DATA_PIPELINE_DATA_ROOT" => @pipeline_root}
     arguments = [File.expand_path("../bin/af-source-progress", __dir__), dossier,
                  "--operation-input", operation, "--source-root", @source_root,
                  "--catalog-root", @catalog_root, "--pipeline-root", @pipeline_root,
                  "--spec-root", public_root, "--json"]
-    stdout, stderr, status = Open3.capture3(*arguments)
+    stdout, stderr, status = Open3.capture3(environment, *arguments)
     assert status.success?, stderr
     assert_equal "PASS", JSON.parse(stdout).fetch("status")
     bundle = File.join(@pipeline_root, "audits/pre-scoring/fixture-book-boundary-editorial")
     context = JSON.parse(File.binread(File.join(bundle, "editorial_context.json")))
     assert_equal expected, context.fetch("public_specifications")
-    stdout, stderr, status = Open3.capture3(*arguments)
+    stdout, stderr, status = Open3.capture3(environment, *arguments)
     assert status.success?, stderr
     assert_equal ["editorial_bundle"], JSON.parse(stdout).fetch("reused")
     FileUtils.remove_entry(bundle)
     initialize_historical_bundle(dossier)
-    stdout, stderr, status = Open3.capture3(*arguments)
+    stdout, stderr, status = Open3.capture3(environment, *arguments)
     assert_equal 2, status.exitstatus, stdout
     assert_includes stderr, "incompatible public specifications"
   end

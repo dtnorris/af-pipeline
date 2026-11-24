@@ -65,6 +65,7 @@ class EmptyCatalogConstructionTest < Minitest::Test
       write_state(File.join(root, "PROJECT_STATE.yml"), base)
       evidence = approved_input(root, base, lengths: [100, 2])
       owner = File.expand_path("../..", $LOADED_FEATURES.find { |path| path.end_with?("/af_xlsx_files.rb") })
+      environment = {"AF_XLSX_FILES_ROOT" => owner, "AF_DATA_PIPELINE_DATA_ROOT" => root}
       command = [RbConfig.ruby, File.expand_path("../bin/af-data", __dir__), "boundary-freeze-stage",
         evidence.fetch(:freeze_path), "--source-root", evidence.fetch(:source_root), "--catalog-root", root,
         "--operation-input", evidence.fetch(:operation_input_path), "--successor-authority", evidence.fetch(:successor_authorization_path), "--no-progress"]
@@ -75,22 +76,22 @@ class EmptyCatalogConstructionTest < Minitest::Test
       authorization["authorization_id"] = AUTH.digest(authorization.except("authorization_id"))
       write_json(evidence.fetch(:successor_authorization_path), projection)
       protected = snapshot(root)
-      _stdout, stderr, status = Open3.capture3({"AF_XLSX_FILES_ROOT" => owner}, *command)
+      _stdout, stderr, status = Open3.capture3(environment, *command)
       assert_equal 2, status.exitstatus
       assert_includes stderr, "authorization conflicts with operation input"
       assert_equal protected, snapshot(root)
       File.binwrite(evidence.fetch(:successor_authorization_path), original)
       protected = snapshot(root)
-      _stdout, stderr, status = Open3.capture3({"AF_XLSX_FILES_ROOT" => File.join(root, "missing-owner")}, *command)
+      _stdout, stderr, status = Open3.capture3(environment.merge("AF_XLSX_FILES_ROOT" => File.join(root, "missing-owner")), *command)
       refute status.success?
       assert_includes stderr, "AF_XLSX_FILES_ROOT"
       assert_equal protected, snapshot(root)
-      _stdout, stderr, status = Open3.capture3({"AF_XLSX_FILES_ROOT" => owner}, *command)
+      _stdout, stderr, status = Open3.capture3(environment, *command)
       assert status.success?, stderr
       result = AfDataPipeline::BoundaryFreezeStage.verify!(**evidence)
       assert_successor(base, result, [100, 2])
       protected = snapshot(root)
-      _stdout, stderr, status = Open3.capture3({"AF_XLSX_FILES_ROOT" => owner}, *command)
+      _stdout, stderr, status = Open3.capture3(environment, *command)
       assert status.success?, stderr
       assert_equal protected, snapshot(root)
     end

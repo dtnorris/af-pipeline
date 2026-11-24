@@ -650,7 +650,7 @@ module AfDataPipeline
           page = unresolved_issue_pages(receipt).first
           resume_command = catalog_front_door_command(receipt)
           commands = []
-          if page
+          if page && @pdf_converter_root
             commands << command(
               pdf_converter_root,
               File.join(pdf_converter_root, "bin", "review-page-exception"),
@@ -1554,9 +1554,10 @@ module AfDataPipeline
       end.uniq.sort
     end
 
+    # Render an advisory resume command only when the receipt and caller select its inputs.
     def catalog_front_door_command(receipt)
       source_pdf = receipt.dig("source", "path").to_s.strip
-      return nil if source_pdf.empty?
+      return nil if source_pdf.empty? || !@adventure_finder_root
 
       front_door_root = adventure_finder_root
       command(

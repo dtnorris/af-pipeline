@@ -107,7 +107,7 @@ The generic AMC writers also compose private release workbooks; their caller's
 owning service establishes that private destination before invoking them.
 Canonical bundles/manifests/indexes, equivalence reports, historical expanded
 archives, ingestion provenance copies and duplicate-recovery evidence remain
-`llm-response-data`-owned. The evidence builders/verifiers/shadow writer do not
+`llm-response-data`-owned. The evidence builders and verifiers do not
 reinterpret those roots as AFDP operational storage. None of these external
 stores is relocated, discovered beneath the data root, or authorized by it.
 

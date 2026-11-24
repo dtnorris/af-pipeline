@@ -317,6 +317,31 @@ class ProductionSnapshotV1Test < Minitest::Test
     end
   end
 
+  # Confirms that conflicting flat snapshot rows publish no candidates or holds.
+  def test_flat_assessment_refuses_conflicting_identity_and_status
+    Dir.mktmpdir do |dir|
+      assessments = File.join(dir, "prod-batch", "assessments")
+      FileUtils.mkdir_p(assessments)
+      File.write(File.join(assessments, "levels.csv"), <<~CSV)
+        adventure_id,run_id,status,metric,value
+        ADV-0001,synthetic-start,PROPOSED,Level Start,3
+        ADV-0002,synthetic-end,REJECTED,Level End,5
+      CSV
+
+      result = extract(dir)
+
+      assert_empty result.candidates
+      assert_empty result.holds
+      assert_equal 1, result.runs.length
+      run = result.runs.first
+      assert_equal "afcsu-flat-v1", run.fetch("metadata_schema")
+      assert_equal "error", run.fetch("mechanical_status")
+      assert_match(/exactly one canonical adventure/, result.errors.join("\n"))
+      assert_match(/exactly one scoring run_id/, result.errors.join("\n"))
+      assert_match(/rows must all have status PROPOSED/, result.errors.join("\n"))
+    end
+  end
+
   def test_identical_duplicate_and_conflicting_candidate_keys_are_distinguished
     Dir.mktmpdir do |dir|
       write_production_run(

@@ -18,13 +18,12 @@ The adapter preserves pipeline results, ValidationError, CLI output and stronger
 validation policy; MD has no dependency on pipeline/private-data-root classes.
 Registration still requires an existing registry and grants no editorial approval.
 
-For disposable code/data separation, set `AF_DATA_PIPELINE_DATA_ROOT` to an
-existing authorized private directory. Omit `--pipeline-root`, or supply that
+Set `AF_DATA_PIPELINE_DATA_ROOT` to an existing authorized private directory
+for the public executable. Omit `--pipeline-root`, or supply that
 same data directory. The executable checkout and subprocess cwd remain the
 code root; the `pipeline` locator below resolves against the data root. See the
 [private-root contract and ownership inventory](architecture.md#private-operational-data-root)
-for precedence, failure behavior and downstream invocations. Without the
-variable, the original private-checkout defaults remain supported.
+for precedence, failure behavior and downstream invocations.
 
 ```sh
 bin/af-source-progress ARTIFACT \
@@ -84,6 +83,10 @@ IDs, make Phase 1/1b/2 decisions, approve a freeze, run inference or scoring,
 write an AMC, or change `catalog_head`, `matcher_authorized_baseline`, or
 `production_dependency_floor`. Unknown or ambiguous page mappings and source
 quality flags stop at `NEEDS_SOURCE_QA_REVIEW`.
+
+A conversion receipt awaiting page review returns `NEEDS_PAGE_REVIEW` without
+running a continuation. The router adds optional page-review and front-door
+commands when their respective component roots have been selected.
 
 The wider legacy `af-ingest-next --auto` router remains compatible and retains
 its existing allowlist. Operation coordinators use this source-only seam so an

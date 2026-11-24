@@ -1,8 +1,8 @@
 # AdventureFinder production-evidence storage contract v0.1
 
-**Status:** Frozen contract with deterministic manifest/bundle construction,
-independent verification, derived SQLite indexing, lookup/retrieval, production
-equivalence gating, and forward compact-ingest cutover implemented.
+**Status:** Frozen storage contract. The public distribution supports
+deterministic manifest/bundle construction, independent verification, derived
+SQLite indexing, lookup/retrieval and mechanical equivalence checks.
 
 ## Purpose
 
@@ -26,33 +26,28 @@ migration/cleanup milestone.
 `af-evidence` is the standalone implementation owner for manifest/bundle
 construction, verification, derived indexing, lookup and retrieval. Its ordinary
 Ruby entry is `require "af_evidence"` with EV's `lib` on the load path.
-The pipeline adapter loads `../af-evidence/lib/af_evidence.rb` relative to
-the pipeline repository root. Clone both repositories as siblings before
-using pipeline commands. A missing EV checkout raises `LoadError`; no
-installed-gem fallback is selected by this adapter. No packaged release
-is established by this source-tree integration.
+Set `AF_EVIDENCE_ROOT` to the absolute checkout path pinned in
+[`config/public_owners.tsv`](../config/public_owners.tsv). The pipeline loads
+`lib/af_evidence.rb` from that checkout. An absent selection or a different
+already-loaded evidence owner raises `LoadError`.
 
 `af-data-pipeline` retains the existing `AfDataPipeline::Evidence*` entry points
 as thin subclasses of the `AfEvidence::Evidence*` owners. They forward results
 and map EV validation failures to `AfDataPipeline::ValidationError`, preserving
-pipeline rescue and receipt contracts. `ProductionEvidenceShadowWriter`
-delegates pair reuse/publication and index publication to EV's `EvidenceStore`.
-Its `response_root:` argument must select an absolute archive directory without
-NUL or `.`/`..` path components; spelling is checked before normalization.
-Archive selection is independent of the EV code loader and
-`AF_DATA_PIPELINE_DATA_ROOT`. Legacy production caller defaults and persisted
-`llm_response_data_root` bindings retain their existing meaning.
-`ProductionEvidenceEquivalenceGate` retains production report labels, schema and
-authoritative/diagnostic interpretation over EV's four mechanical equivalence
-checks. PL retains finalization, selected-root authorization and two-phase
-expanded-evidence recovery; `EvidenceReleaseProof` owns fresh storage/Git proof
-and removal of the explicitly bound source after PL validates durable authority.
+pipeline rescue and receipt contracts. Use `AfEvidence::EvidenceStore` for
+verified pair reuse/publication and derived index publication. It takes
+explicit absolute source, evidence and index paths. These paths are independent
+of the EV code selection and `AF_DATA_PIPELINE_DATA_ROOT`. Use
+`AfEvidence::EvidenceEquivalenceChecker` for the four mechanical equivalence
+checks. Production shadow writing, cutover decisions and completion receipts
+belong to the separate production workflow.
 
-The pipeline retrieval adapter applies `PrivateDataRoot.destination!` before
-EV independently validates a new output outside the canonical store. EV rejects
+`bin/af-data evidence-retrieve` requires `AF_DATA_PIPELINE_DATA_ROOT` and
+an explicit new output beneath it. The pipeline retrieval adapter applies
+`PrivateDataRoot.destination!` before EV independently validates a new output
+outside the canonical store. EV rejects
 traversal, symlink destinations/ancestors, overlap, existing destinations and
 missing/unwritable parents without relying on a caller authorization boolean.
-Opt-in selected-root restrictions remain an additional pipeline requirement.
 The full pipeline entry still loads its workflow classes and existing
 CSV/REXML/ZIP dependencies; it is not an evidence-only bootstrap. Independent
 use loads the ordinary EV entry and its declared closure instead.
@@ -294,10 +289,10 @@ logical indexed records for the same canonical corpus.
 
 ## Transition safety
 
-Forward compact-ingest cutover is active for newly prepared production batches.
-The cutover preserves a temporary expanded archive outside `llm-response-data`
-for scanning, editorial review, and deterministic equivalence validation, but
-that expanded tree is no longer the durable Git representation.
+For production workflows using compact ingest, preserve a temporary expanded
+archive outside `llm-response-data` for scanning, editorial review, and
+deterministic equivalence validation. The compact pair and derived index are
+the durable Git representation.
 
 For cut-over batches:
 

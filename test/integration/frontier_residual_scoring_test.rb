@@ -272,7 +272,8 @@ class FrontierResidualScoringTest < Minitest::Test
 
   def test_public_cli_prepare_apply_verify_and_decline
     with_frontier do |fixture, request, packet, result|
-      command = [RbConfig.ruby, File.expand_path("../../bin/af-frontier-residual-scoring", __dir__)]
+      command = [{"AF_DATA_PIPELINE_DATA_ROOT" => fixture.root},
+        RbConfig.ruby, File.expand_path("../../bin/af-frontier-residual-scoring", __dir__)]
       stdout, stderr, status = Open3.capture3(*command, "prepare", "--request", request, "--output", packet)
       assert status.success?, stderr
       assert_equal "READY", JSON.parse(stdout).fetch("status")
@@ -293,7 +294,7 @@ class FrontierResidualScoringTest < Minitest::Test
   private
 
   def with_frontier(gaps: true, levels: {"start" => 1, "end" => 5}, specs: nil, configure: nil)
-    Dir.mktmpdir("frontier-residual-") do |root|
+    Dir.mktmpdir("frontier-residual-", File.realpath(Dir.tmpdir)) do |root|
       fixture = StandingBulkScoreReleaseFixture.new(root:, specs:, boundary_levels: levels)
       fixture.mutate_policy { |policy| policy.fetch("scope")["dimensions"] = ["Seriousness"] } if gaps
       configure&.call(fixture)

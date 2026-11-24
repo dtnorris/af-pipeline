@@ -374,7 +374,7 @@ class StandingBulkScoreReleaseTest < Minitest::Test
         "--inputs", fixture.inputs_path,
         "--output", fixture.output_dir
       ]
-      stdout, stderr, status = Open3.capture3(*command)
+      stdout, stderr, status = Open3.capture3({"AF_DATA_PIPELINE_DATA_ROOT" => fixture.root}, *command)
       assert status.success?, stderr
       assert_match(/published new release/, stdout)
     end
@@ -431,7 +431,7 @@ class StandingBulkScoreReleaseTest < Minitest::Test
   private
 
   def with_fixture(**options)
-    Dir.mktmpdir("standing-bulk-release-") do |root|
+    Dir.mktmpdir("standing-bulk-release-", File.realpath(Dir.tmpdir)) do |root|
       yield StandingBulkScoreReleaseFixture.new(root:, **options)
     end
   end

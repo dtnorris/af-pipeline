@@ -165,15 +165,16 @@ class SourceRegisterEmptyRegistryTest < Minitest::Test
   def test_public_cli_registers_first_source_and_refuses_duplicate_without_mutation
     with_registry("# keep\n" + HEADER + "sources: {} # keep\n\n# tail") do |root, markdown, registry|
       before = snapshot(markdown)
+      environment = {"AF_DATA_PIPELINE_DATA_ROOT" => File.realpath(root)}
       command = [RbConfig.ruby, File.expand_path("../bin/af-source-register", __dir__),
         markdown, "--source-root", root, "--source-id", "Mechanical Source", "--page-marker-offset", "-2"]
-      stdout, stderr, status = Open3.capture3(*command)
+      stdout, stderr, status = Open3.capture3(environment, *command)
       assert status.success?, stderr
       assert_includes stdout, "Source registration: PASS"
       assert_equal({"Mechanical Source" => {"file" => "Mechanical.md", "page_marker_offset" => "-2"}},
         AfDataPipeline::BoundaryFreeze.registry_context(root, nil).fetch("sources"))
       registered = snapshot(registry)
-      stdout, stderr, status = Open3.capture3(*command)
+      stdout, stderr, status = Open3.capture3(environment, *command)
       assert_equal 2, status.exitstatus
       assert_empty stdout
       assert_match(/already contains source identity/, stderr)
@@ -191,18 +192,19 @@ class SourceRegisterEmptyRegistryTest < Minitest::Test
       FileUtils.mkdir_p(File.join(invalid, "lib"))
       File.write(File.join(invalid, "lib", "af_source_md.rb"), "# unsupported owner\n")
       before = [snapshot(registry), snapshot(markdown)]
+      environment = {"AF_DATA_PIPELINE_DATA_ROOT" => File.realpath(root)}
       command = [RbConfig.ruby, File.expand_path("../bin/af-source-register", __dir__),
         markdown, "--source-root", root, "--source-id", "Mechanical Source"]
       ["", File.join(root, "missing-owner"), invalid].each do |selection|
         stdout, stderr, status = Open3.capture3(
-          {"AF_SOURCE_MD_ROOT" => selection, "RUBYLIB" => File.join(owner::ROOT, "lib")}, *command
+          environment.merge("AF_SOURCE_MD_ROOT" => selection, "RUBYLIB" => File.join(owner::ROOT, "lib")), *command
         )
         assert_equal 2, status.exitstatus
         assert_empty stdout
         assert_match(/source Markdown owner|AF_SOURCE_MD_ROOT/, stderr)
         assert_equal before, [snapshot(registry), snapshot(markdown)]
       end
-      stdout, stderr, status = Open3.capture3({"AF_SOURCE_MD_ROOT" => owner::ROOT}, *command)
+      stdout, stderr, status = Open3.capture3(environment.merge("AF_SOURCE_MD_ROOT" => owner::ROOT), *command)
       assert status.success?, stderr
       assert_includes stdout, "Source registration: PASS"
     end
