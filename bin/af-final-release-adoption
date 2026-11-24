@@ -1,0 +1,10 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../lib/af_data_pipeline"
+require_relative "../lib/af_data_pipeline/private_data_root"
+
+if %w[prepare approve decline adopt].include?(ARGV.first)
+  exit AfDataPipeline::PrivateDataRoot.run_cli { AfDataPipeline::FinalReleaseAdoption.run(ARGV) }
+end
+exit AfDataPipeline::FinalReleaseAdoption.run(ARGV)

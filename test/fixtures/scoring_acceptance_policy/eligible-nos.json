@@ -1,0 +1,60 @@
+{
+  "schema": "adventurefinder-scoring-acceptance-evaluation-input/v0.1",
+  "candidate": {
+    "key": "synthetic-nos-001",
+    "dimension": "# of Sessions"
+  },
+  "qualification": {
+    "state": "LOCAL_QUALIFIED",
+    "policy_profile_id": "nos-clean-blind-v1"
+  },
+  "provenance": {
+    "afw_contract_sha256": "4b00a37fca52147578ce6206a2e7d2bc21fd24919d463d148055ac789bfe20e2",
+    "qualification_record_sha256": "c6a62ff2d3445d7d41f8e43c9d9e5fe03b2a881f4b8c83469f4c43943cec340c",
+    "afw_models_config_sha256": "49907a4792a6b029361e904d77b14a51bdd290b35163e62830bc2adb611ee4a9",
+    "model_alias": "qwen27",
+    "model_manifest_digest": "3a40c32f965c7247ee125ad85f0e7af9b9ffcf76bce3bc45e87b9bafc51aa929",
+    "scorer_commit": "4fcd7cf0378fe2ae3107639ff38f28f5574999af",
+    "prompt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "schema_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "source_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "candidate_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "review_package_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "evidence_receipt_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "runtime": {
+      "provider": "ollama",
+      "architecture": "clean-single-pass-blind-nos",
+      "replicates": 1,
+      "favorable_rerun": false,
+      "expected_cost_usd": 0
+    }
+  },
+  "source": {
+    "exact_complete_canonical_unit": true,
+    "page_count": 42
+  },
+  "assessment": {
+    "state": "resolved",
+    "review_flags": []
+  },
+  "evidence": {
+    "complete": true,
+    "unambiguous": true,
+    "sufficient": true,
+    "rationale_value_consistent": true,
+    "construct_and_rubric_valid": true,
+    "prompt_matches_qualified_profile": true,
+    "schema_matches_qualified_profile": true,
+    "source_matches_candidate": true,
+    "severe_failure": false
+  },
+  "attempt": {
+    "authoritative": true,
+    "successful": true,
+    "replicate": 1,
+    "retry": false,
+    "superseded": false,
+    "favorable_rerun": false
+  },
+  "existing_human_decision": null
+}

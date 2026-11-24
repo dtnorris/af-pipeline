@@ -1,0 +1,81 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "minitest"
+
+# A separate, fixed public contract; ordinary private runner policy is unchanged.
+module PublicStandingReleaseGate
+  # Observes actual Minitest results, retaining duplicates for exact accounting.
+  class Reporter < Minitest::StatisticsReporter
+    # Accepts the independently declared identities; initializes observed results.
+    def initialize(required)
+      super()
+      @required = required.sort
+      @executed = []
+    end
+
+    # Records a completed result and its fully qualified identity, including skips.
+    def record(result)
+      super
+      @executed << "#{result.class_name}##{result.name}"
+    end
+
+    # Returns true only for exactly-once execution with no failure/error/skip.
+    def passed?
+      @executed.sort == @required && failures.zero? && errors.zero? && skips.zero?
+    end
+
+    # Prints independent execution accounting and a diagnostic on contract failure.
+    def report
+      super
+      puts "Public standing-release execution: #{@executed.length}/#{@required.length} required methods"
+      warn "Public standing-release gate failed: executed identities differ or required work failed/skipped" unless passed?
+    end
+  end
+
+  # Installs this gate's reporter explicitly, even with plugin loading disabled.
+  def self.minitest_plugin_init(_options)
+    Minitest.reporter << @reporter
+  end
+
+  # Runs only the declared standing-release file in a fresh CLI process. Returns
+  # false for malformed manifests, discovery drift, or unsuccessful execution;
+  # file/load errors propagate to a nonzero process exit. No filters are accepted.
+  def self.run
+    unless ARGV.empty?
+      warn "Usage: bundle exec ruby bin/af-public-standing-release-test (no selection overrides)"
+      return false
+    end
+
+    required = JSON.parse(File.binread(File.expand_path("../test/public_standing_release_methods.json", __dir__)))
+    unless required.is_a?(Array) && required.length == 18 && required.uniq == required && required.all? { |name|
+      name.is_a?(String) && name.match?(/\AStandingBulkScoreReleaseTest#test_[a-z0-9_]+\z/)
+    }
+      warn "Public standing-release gate failed: invalid required-method manifest"
+      return false
+    end
+
+    Minitest.seed = 170
+    require_relative "../test/standing_bulk_score_release_test"
+    discovered = Minitest::Runnable.runnables.flat_map do |suite|
+      suite.runnable_methods.map { |method| "#{suite}##{method}" }
+    end.sort
+    unless discovered == required.sort
+      warn "Public standing-release discovery differs from required-method manifest"
+      warn "Missing: #{(required - discovered).join(', ')}"
+      warn "Extra: #{(discovered - required).join(', ')}"
+      warn "Duplicate discovery" unless discovered.uniq == discovered
+      return false
+    end
+
+    @reporter = Reporter.new(required)
+    Minitest.extensions << self
+    Minitest.run(["--seed", "170", "--verbose", "--no-plugins"]) && @reporter.passed?
+  end
+end
+
+# Own execution explicitly so test_helper's autorunner cannot run a second time.
+def Minitest.autorun; end
+
+exit(PublicStandingReleaseGate.run ? 0 : 1)

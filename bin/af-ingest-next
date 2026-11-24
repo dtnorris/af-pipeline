@@ -1,0 +1,14 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+ROOT = File.expand_path("..", __dir__)
+$LOAD_PATH.unshift File.join(ROOT, "lib")
+
+require "af_data_pipeline/ingest_next"
+
+require_relative "../lib/af_data_pipeline/private_data_root"
+
+if ARGV == ["--help"] || ARGV == ["-h"]
+  exit AfDataPipeline::IngestNext::CLI.run(ARGV)
+end
+exit AfDataPipeline::PrivateDataRoot.run_cli { AfDataPipeline::IngestNext::CLI.run(ARGV) }

@@ -1,0 +1,174 @@
+{
+  "schema_version": "af-staged-scoring-authority-ig13c-cases/v0.1",
+  "cases": [
+    {
+      "id": "unchanged-head",
+      "group": "head",
+      "mutation": "unchanged",
+      "phases": ["before_issue", "after_workload_freeze"],
+      "decision": "SAFE_REUSE",
+      "reason": "UNCHANGED",
+      "preserves": "base, staged catalog, authority, workload, IDs and all three catalog roles",
+      "forbids": "catalog adoption or execution authority",
+      "next_action": "prepare or replay the exact workload"
+    },
+    {
+      "id": "compatible-unrelated-score",
+      "group": "head",
+      "mutation": "unrelated",
+      "phases": ["before_issue", "after_workload_freeze"],
+      "decision": "SAFE_REUSE",
+      "reason": "UNRELATED_SCALAR_SCORES",
+      "preserves": "protected closure and original staged/base bindings",
+      "forbids": "rebasing the workload onto the advanced head",
+      "next_action": "continue with the exact staged catalog"
+    },
+    {
+      "id": "protected-parent-change",
+      "group": "head",
+      "mutation": "parent",
+      "phases": ["before_issue", "after_workload_freeze"],
+      "decision": "FRESH_DECISION",
+      "reason": "PROTECTED_RECORD_CHANGED",
+      "preserves": "existing authority and frozen workload evidence",
+      "forbids": "automatic rebind, boundary rewrite or ID reallocation",
+      "next_action": "obtain an explicit conflict decision"
+    },
+    {
+      "id": "protected-source-change",
+      "group": "head",
+      "mutation": "source",
+      "phases": ["before_issue", "after_workload_freeze"],
+      "decision": "FRESH_DECISION",
+      "reason": "PROTECTED_RECORD_CHANGED",
+      "preserves": "source lineage and existing frozen evidence",
+      "forbids": "source substitution or silent compatibility",
+      "next_action": "obtain an explicit conflict decision"
+    },
+    {
+      "id": "protected-page-change",
+      "group": "head",
+      "mutation": "pages",
+      "phases": ["before_issue", "after_workload_freeze"],
+      "decision": "FRESH_DECISION",
+      "reason": "PROTECTED_RECORD_CHANGED",
+      "preserves": "approved page and boundary lineage",
+      "forbids": "page reinterpretation or silent compatibility",
+      "next_action": "obtain an explicit conflict decision"
+    },
+    {
+      "id": "concurrent-id-collision",
+      "group": "head",
+      "mutation": "collision",
+      "phases": ["before_issue", "after_workload_freeze"],
+      "decision": "FRESH_DECISION",
+      "reason": "ID_COLLISION",
+      "preserves": "original allocation and frozen workload",
+      "forbids": "automatic Adventure ID reallocation",
+      "next_action": "obtain an explicit allocation conflict decision"
+    },
+    {
+      "id": "unprovable-structure",
+      "group": "head",
+      "mutation": "structure",
+      "phases": ["before_issue", "after_workload_freeze"],
+      "decision": "UNPROVABLE",
+      "reason": "WORKBOOK_STRUCTURE",
+      "preserves": "all retained inputs and frozen evidence",
+      "forbids": "guessing structural compatibility",
+      "next_action": "supply machine-verifiable compatible evidence"
+    },
+    {
+      "id": "byte-identical-staged-regeneration",
+      "group": "identity",
+      "mutation": "rewrite_same_staged_bytes",
+      "decision": "SAFE_REUSE",
+      "reason": "UNCHANGED",
+      "preserves": "staged identity and authority ID",
+      "forbids": "new authority for identical bytes",
+      "next_action": "reuse the existing authority"
+    },
+    {
+      "id": "changed-staged-content",
+      "group": "identity",
+      "mutation": "change_staged_bytes",
+      "error": "staged evidence mismatch",
+      "preserves": "published authority and original staged binding",
+      "forbids": "updating staged bytes under existing authority",
+      "next_action": "restore the exact staged artifact"
+    },
+    {
+      "id": "changed-authority-bytes",
+      "group": "identity",
+      "mutation": "change_authority_bytes",
+      "error": "AUTHORITY_CONFLICT",
+      "preserves": "candidate authority and its evidence",
+      "forbids": "accepting semantically equivalent rewritten bytes",
+      "next_action": "restore the canonical published authority bytes"
+    },
+    {
+      "id": "changed-authority-version",
+      "group": "identity",
+      "mutation": "change_authority_version",
+      "error": "AUTHORITY_CONFLICT",
+      "preserves": "supported authority version and publication",
+      "forbids": "in-place authority version migration",
+      "next_action": "use the supported immutable authority"
+    },
+    {
+      "id": "changed-authority-binding",
+      "group": "identity",
+      "mutation": "change_authority_binding",
+      "error": "AUTHORITY_CONFLICT",
+      "preserves": "exact staged and operation bindings",
+      "forbids": "in-place authority rebinding",
+      "next_action": "restore the exact immutable authority"
+    },
+    {
+      "id": "missing-original-base",
+      "group": "identity",
+      "mutation": "remove_original_base",
+      "error": "INVALID_EVIDENCE",
+      "preserves": "authority, staged and workload evidence",
+      "forbids": "substituting the current catalog head",
+      "next_action": "restore the exact original base artifact"
+    },
+    {
+      "id": "newer-base-rebind",
+      "group": "identity",
+      "mutation": "rebind_intent_to_staged",
+      "error": "BASE_REBIND",
+      "preserves": "intent and original-base lineage",
+      "forbids": "rebinding intent to a newer catalog",
+      "next_action": "use separately approved lineage"
+    },
+    {
+      "id": "adventure-id-reallocation",
+      "group": "identity",
+      "mutation": "forge_allocation",
+      "error": "ALLOCATION_CONFLICT",
+      "preserves": "approved frozen record order and original ID allocation",
+      "forbids": "self-consistent but unauthorized ID replacement",
+      "next_action": "restore the deterministic allocation evidence"
+    },
+    {
+      "id": "workload-rebind",
+      "group": "identity",
+      "mutation": "change_workload_id",
+      "error": "WORKLOAD_CONFLICT",
+      "preserves": "frozen workload files and authority binding",
+      "forbids": "allocating a new workload ID to evade stale input",
+      "next_action": "use the exact frozen workload identity"
+    },
+    {
+      "id": "fresh-process-relocated-cwd",
+      "group": "restart",
+      "mutation": "validate_from_other_cwd",
+      "decision": "SAFE_REUSE",
+      "reason": "UNCHANGED",
+      "preserves": "all absolute evidence bindings and role state",
+      "forbids": "reconstructing private or working-directory-relative paths",
+      "next_action": "continue with the validated frozen workload"
+    }
+  ]
+}

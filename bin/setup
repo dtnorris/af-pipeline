@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+export BUNDLE_FROZEN=true GIT_OPTIONAL_LOCKS=0
+while IFS=$'\t' read -r selector owner revision; do
+  path="${!selector:-}"
+  if [[ "$path" != /* || ! -d "$path" ]]; then
+    printf 'Set %s to an absolute checkout of %s at %s\n' "$selector" "$owner" "$revision" >&2
+    exit 1
+  fi
+  if [[ "$(git -C "$path" rev-parse --show-toplevel)" != "$(cd "$path" && pwd -P)" ||
+        "$(git -C "$path" rev-parse HEAD)" != "$revision" ||
+        -n "$(git -C "$path" status --porcelain --untracked-files=all)" ]]; then
+    printf 'Expected a clean checkout of %s at %s in %s\n' "$owner" "$revision" "$path" >&2
+    exit 1
+  fi
+  printf '%s %s %s\n' "$owner" "$revision" "$path"
+done < config/public_owners.tsv
+command -v zstd >/dev/null
+command -v unzip >/dev/null
+bundle check

@@ -1,0 +1,10 @@
+env:
+  BUNDLE_FROZEN: "true"
+
+steps:
+  - label: "PL — contract and integration"
+    key: "pipeline-tests"
+    agents:
+      queue: "act-macos"
+    timeout_in_minutes: 15
+    command: "bash .buildkite/test.sh"

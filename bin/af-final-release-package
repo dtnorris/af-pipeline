@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+require "af_data_pipeline"
+require_relative "../lib/af_data_pipeline/private_data_root"
+
+if ARGV.first == "prepare"
+  exit AfDataPipeline::PrivateDataRoot.run_cli { AfDataPipeline::FinalReleasePackage.run(ARGV) }
+end
+exit AfDataPipeline::FinalReleasePackage.run(ARGV)

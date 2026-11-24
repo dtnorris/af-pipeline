@@ -1,0 +1,14 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+ROOT = File.expand_path("..", __dir__)
+$LOAD_PATH.unshift File.join(ROOT, "lib")
+
+require_relative "../lib/af_data_pipeline/boundary_editorial"
+
+require_relative "../lib/af_data_pipeline/private_data_root"
+
+if %w[init render approve freeze-approved import rebind].include?(ARGV.first)
+  exit AfDataPipeline::PrivateDataRoot.run_cli { AfDataPipeline::BoundaryEditorial::CLI.run(ARGV) }
+end
+exit AfDataPipeline::BoundaryEditorial::CLI.run(ARGV)

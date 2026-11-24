@@ -1,0 +1,262 @@
+# Per-file coverage floors. A file that drops below its floor fails the run,
+# and files with no entry fall through to the global per-file minimum.
+# Regenerate with `simplecov ratchet`. Floors only ever tighten.
+lib/af_data_pipeline.rb:
+  lines:
+    percent: 100.0
+    missed: 0
+  branches:
+    percent: 100.0
+    missed: 0
+lib/af_data_pipeline/adapter_registry.rb:
+  lines:
+    percent: 100.0
+    missed: 0
+  branches:
+    percent: 100.0
+    missed: 0
+lib/af_data_pipeline/adapters/base.rb:
+  lines:
+    percent: 100.0
+    missed: 0
+  branches:
+    percent: 100.0
+    missed: 0
+lib/af_data_pipeline/adapters/canonical_json_v01.rb:
+  lines:
+    percent: 91.66
+    missed: 1
+  branches:
+    percent: 100.0
+    missed: 0
+lib/af_data_pipeline/adapters/horizontal_discovery_v1.rb:
+  lines:
+    percent: 89.36
+    missed: 20
+  branches:
+    percent: 67.94
+    missed: 25
+lib/af_data_pipeline/adapters/production_snapshot_v1.rb:
+  lines:
+    percent: 92.85
+    missed: 26
+  branches:
+    percent: 66.5
+    missed: 71
+lib/af_data_pipeline/amc_adoption_review.rb:
+  lines:
+    percent: 92.42
+    missed: 5
+  branches:
+    percent: 62.5
+    missed: 3
+lib/af_data_pipeline/amc_apply.rb:
+  lines:
+    percent: 90.86
+    missed: 54
+  branches:
+    percent: 64.39
+    missed: 94
+lib/af_data_pipeline/amc_compatibility_check.rb:
+  lines:
+    percent: 88.75
+    missed: 37
+  branches:
+    percent: 67.13
+    missed: 47
+lib/af_data_pipeline/amc_compatibility_cli.rb:
+  lines:
+    percent: 85.48
+    missed: 9
+  branches:
+    percent: 72.72
+    missed: 6
+lib/af_data_pipeline/amc_finalize.rb:
+  lines:
+    percent: 87.03
+    missed: 38
+  branches:
+    percent: 58.33
+    missed: 60
+lib/af_data_pipeline/boundary_dossier.rb:
+  lines:
+    percent: 95.82
+    missed: 19
+  branches:
+    percent: 68.29
+    missed: 39
+lib/af_data_pipeline/boundary_editorial.rb:
+  lines:
+    percent: 81.3
+    missed: 109
+  branches:
+    percent: 48.87
+    missed: 91
+lib/af_data_pipeline/boundary_freeze.rb:
+  lines:
+    percent: 91.27
+    missed: 24
+  branches:
+    percent: 64.34
+    missed: 41
+lib/af_data_pipeline/boundary_freeze_apply.rb:
+  lines:
+    percent: 94.72
+    missed: 35
+  branches:
+    percent: 68.11
+    missed: 88
+lib/af_data_pipeline/cli.rb:
+  lines:
+    percent: 91.86
+    missed: 35
+  branches:
+    percent: 60.65
+    missed: 96
+lib/af_data_pipeline/editorial_audit.rb:
+  lines:
+    percent: 93.18
+    missed: 15
+  branches:
+    percent: 70.27
+    missed: 22
+lib/af_data_pipeline/error.rb:
+  lines:
+    percent: 100.0
+    missed: 0
+  branches:
+    percent: 100.0
+    missed: 0
+lib/af_data_pipeline/evidence_bundle_builder.rb:
+  lines:
+    percent: 86.82
+    missed: 17
+  branches:
+    percent: 57.14
+    missed: 18
+lib/af_data_pipeline/evidence_bundle_verifier.rb:
+  lines:
+    percent: 83.62
+    missed: 37
+  branches:
+    percent: 56.14
+    missed: 50
+lib/af_data_pipeline/evidence_index_builder.rb:
+  lines:
+    percent: 89.82
+    missed: 29
+  branches:
+    percent: 65.51
+    missed: 40
+lib/af_data_pipeline/evidence_index_lookup.rb:
+  lines:
+    percent: 95.58
+    missed: 3
+  branches:
+    percent: 76.92
+    missed: 6
+lib/af_data_pipeline/evidence_index_verifier.rb:
+  lines:
+    percent: 88.46
+    missed: 9
+  branches:
+    percent: 53.12
+    missed: 15
+lib/af_data_pipeline/evidence_manifest_builder.rb:
+  lines:
+    percent: 90.57
+    missed: 13
+  branches:
+    percent: 61.97
+    missed: 27
+lib/af_data_pipeline/evidence_retriever.rb:
+  lines:
+    percent: 88.94
+    missed: 23
+  branches:
+    percent: 56.16
+    missed: 32
+lib/af_data_pipeline/horizontal_review_writer.rb:
+  lines:
+    percent: 94.8
+    missed: 4
+  branches:
+    percent: 50.0
+    missed: 9
+lib/af_data_pipeline/ingest_next.rb:
+  lines:
+    percent: 65.03
+    missed: 114
+  branches:
+    percent: 43.33
+    missed: 68
+lib/af_data_pipeline/normalizer.rb:
+  lines:
+    percent: 91.66
+    missed: 1
+  branches:
+    percent: 100.0
+    missed: 0
+lib/af_data_pipeline/production_review_writer.rb:
+  lines:
+    percent: 99.13
+    missed: 1
+  branches:
+    percent: 85.0
+    missed: 3
+lib/af_data_pipeline/project_state.rb:
+  lines:
+    percent: 96.52
+    missed: 4
+  branches:
+    percent: 60.37
+    missed: 21
+lib/af_data_pipeline/result_record.rb:
+  lines:
+    percent: 100.0
+    missed: 0
+  branches:
+    percent: 75.0
+    missed: 3
+lib/af_data_pipeline/review_packet_writer.rb:
+  lines:
+    percent: 100.0
+    missed: 0
+  branches:
+    percent: 100.0
+    missed: 0
+lib/af_data_pipeline/scanner.rb:
+  lines:
+    percent: 100.0
+    missed: 0
+  branches:
+    percent: 87.5
+    missed: 1
+lib/af_data_pipeline/source_identity.rb:
+  lines:
+    percent: 95.0
+    missed: 1
+  branches:
+    percent: 66.66
+    missed: 4
+lib/af_data_pipeline/source_intake.rb:
+  lines:
+    percent: 94.06
+    missed: 20
+  branches:
+    percent: 65.81
+    missed: 40
+lib/af_data_pipeline/source_workspace.rb:
+  lines:
+    percent: 88.88
+    missed: 3
+  branches:
+    percent: 60.0
+    missed: 4
+lib/af_data_pipeline/version.rb:
+  lines:
+    percent: 100.0
+    missed: 0
+  branches:
+    percent: 100.0
+    missed: 0
