@@ -1,0 +1,52 @@
+{
+  "schema_version": "adventurefinder-standing-bulk-score-ingestion-policy/v0.1",
+  "policy_id": "adventurefinder-standing-bulk-score-ingestion",
+  "policy_version": "synthetic-test-v1",
+  "status": "ACTIVE",
+  "scope": {
+    "profiles": [
+      "production",
+      "levels-v2.1",
+      "production-base",
+      "phase6-v0.3",
+      "phase6-v0.4"
+    ],
+    "model_aliases": [
+      "qwen"
+    ],
+    "models": [
+      "qwen3.6:35b-a3b"
+    ],
+    "dimensions": [
+      "Level Start",
+      "Level End",
+      "Combat Emphasis",
+      "Structural Openness",
+      "Darkness / Horror Intensity",
+      "Player Beginner Suitability",
+      "Social Interaction Emphasis",
+      "Investigation Emphasis"
+    ],
+    "source_scope": "operation-bound-exact-source",
+    "page_eligibility": "frozen-qualified-workload"
+  },
+  "flag_rules": {
+    "advisory": [
+      "LOW_CONFIDENCE",
+      "REVIEW_RECOMMENDED"
+    ],
+    "hard_refusal": [
+      "UNRESOLVED",
+      "SOURCE_HOLD",
+      "MALFORMED_EVIDENCE",
+      "AMBIGUOUS_EVIDENCE",
+      "QUALIFICATION_FAILURE"
+    ]
+  },
+  "activation": {
+    "activation_id": "synthetic-test-only-standing-activation-v1",
+    "owner_selection_id": "6ecf66149dba99ab13c5382d978d82abe8ed3829462baed92ca76bff25d9858d"
+  },
+  "revision_id": "synthetic-test-only-standing-policy-v1",
+  "policy_digest": "e5966a02be0a96d1e2915d6b5322826a8166ec28a81a8374296b3e9554e75824"
+}

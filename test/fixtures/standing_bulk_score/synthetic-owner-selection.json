@@ -1,0 +1,13 @@
+{
+  "schema_version": "adventurefinder-project-owner-standing-policy-selection/v0.1",
+  "project": "AdventureFinder",
+  "policy_id": "adventurefinder-standing-bulk-score-ingestion",
+  "policy_version": "synthetic-test-v1",
+  "decision": "ACTIVATE",
+  "selected_by": "Synthetic standing-release test actor (not a project owner)",
+  "selection_evidence": {
+    "kind": "project_owner_directive",
+    "reference": "test-fixture://af-data-pipeline/standing-bulk-score/nonproduction-selection-v1"
+  },
+  "selection_id": "6ecf66149dba99ab13c5382d978d82abe8ed3829462baed92ca76bff25d9858d"
+}

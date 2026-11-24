@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AdventureFinder staged scoring intent v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "producer",
+    "mode",
+    "operation",
+    "base_amc",
+    "source",
+    "policy",
+    "selected_by",
+    "selected_at",
+    "interaction",
+    "purpose",
+    "scope",
+    "workload_id",
+    "intent_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "adventurefinder-staged-scoring-intent/v0.1"
+    },
+    "producer": {
+      "const": "adventure-finder"
+    },
+    "mode": {
+      "enum": [
+        "production",
+        "synthetic"
+      ]
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "operation_id",
+        "created_at"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "adventurefinder-ingest-operation/v0.1"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "base_amc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "filename": {
+          "type": "string",
+          "pattern": "^5e_Adventure_Master_Catalog_[0-9]+(?:\\.[0-9]+)+\\.xlsx$"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "edition",
+        "pagination_authority",
+        "publisher"
+      ],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$"
+        },
+        "edition": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$"
+        },
+        "pagination_authority": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$"
+        },
+        "publisher": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$"
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_id",
+        "policy_version",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "policy_id": {
+          "const": "approved-new-records"
+        },
+        "policy_version": {
+          "const": "1"
+        }
+      }
+    },
+    "selected_by": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "selected_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "interaction": {
+      "enum": [
+        "ingest_start",
+        "post_boundary_resume"
+      ]
+    },
+    "purpose": {
+      "const": "prepare_staged_scoring"
+    },
+    "scope": {
+      "const": "operation-approved-new-records"
+    },
+    "workload_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+    },
+    "intent_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

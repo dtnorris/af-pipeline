@@ -1,0 +1,182 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "open3"
+require "rbconfig"
+require "tmpdir"
+require "etc"
+require "minitest"
+require "securerandom"
+require "fileutils"
+require_relative "af_test_suite_coverage"
+require_relative "af_test_suite_selection"
+require_relative "af_test_suite_progress"
+require_relative "af_test_suite_result"
+require_relative "af_test_suite_handoff"
+
+# Consume this process's request before discovery can load subprocess fixtures.
+# Only this public parent may publish it; workers receive private argv bindings.
+TEST_RESULT_REQUEST = [AfTestSuiteHandoff::PATH_KEY, AfTestSuiteHandoff::ID_KEY].to_h { |key| [key, ENV.delete(key)] }
+
+ROOT = File.expand_path("..", __dir__)
+mode_index = ARGV.index("--suite")
+MODE = mode_index ? ARGV.slice!(mode_index, 2).fetch(1) : "fast"
+FILES = AfTestSuiteSelection.files(ROOT, MODE).freeze
+
+if ARGV.first == "--worker"
+  ARGV.shift
+  $stdout.sync = true
+  selection = JSON.parse(File.binread(ARGV.shift))
+  result_path, worker_identity = ARGV.shift, JSON.parse(ARGV.shift)
+  AfTestSuiteResult.install(path: result_path, identity: worker_identity, selection: selection)
+  pattern = "\\A(?:#{selection.map { |name| Regexp.escape(name) }.join('|')})\\z"
+  ARGV.concat(["--name", "/#{pattern}/"])
+  if ENV["COVERAGE"]
+    require "simplecov"
+    SimpleCov.coverage_path = ENV.fetch("AF_COVERAGE_OUTPUT")
+    SimpleCov.command_name = ENV.fetch("AF_COVERAGE_NAME")
+    SimpleCov.finalize_merge false
+    SimpleCov.formatter false
+    SimpleCov.start
+  end
+  FILES.each { |path| require path }
+else
+  completion = AfTestSuiteProgress::Completion.new(suite: MODE,
+    phase: ENV["COVERAGE"] ? "coverage tests" : "functional tests") unless ENV["AFDP_TEST_RESULT_OWNER"]
+  completion_success = false
+  at_exit do
+    error = $!
+    completion&.finish(success: completion_success &&
+      (error.nil? || error.is_a?(SystemExit) && error.success?))
+  end
+  options, tests = AfTestSuiteProgress.phase("test discovery", suite: MODE) do
+    # Discover the same runnable methods as Minitest without running them here.
+    # Workers use the ordinary autorunner in independent Ruby processes.
+    def Minitest.autorun; end
+    FILES.each { |path| require path }
+    arguments = ARGV.dup
+    Minitest.load_plugins unless arguments.include?("--no-plugins") || ENV["MT_NO_PLUGINS"]
+    options = Minitest.process_args(arguments)
+    Minitest.seed = options.fetch(:seed)
+    matcher = lambda do |value|
+      value.is_a?(String) && value =~ %r%/(.*)/% ? Regexp.new(Regexp.last_match(1)) : value
+    end
+    filter = matcher.call(options[:filter]) || /./
+    reject = matcher.call(options[:exclude])
+    tests = Minitest::Runnable.runnables.flat_map do |suite|
+      suite.runnable_methods.filter_map do |method|
+        name = "#{suite}##{method}"
+        next unless filter === method || filter === name
+        next if reject && (reject === method || reject === name)
+        name
+      end
+    end.sort
+    [options, tests]
+  end
+  coverage = !!ENV["COVERAGE"]
+  coverage_started = Time.now.to_i
+  run_id = SecureRandom.hex(16)
+  names = []
+  count = [Etc.nprocessors, coverage ? 4 : 12, [tests.length, 1].max].min
+  groups = Array.new(count) { [] }
+  tests.each_with_index { |name, index| groups[index % count] << name }
+  started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  puts "Running #{tests.length} tests in #{count} isolated Ruby workers (seed #{options[:seed]})"
+  puts "Suite: #{MODE} (#{coverage ? 'coverage' : 'functional'})"
+  $stdout.flush
+  Dir.mktmpdir("af-test-suite-") do |directory|
+    result_paths = []
+    expected_results = []
+    population = AfTestSuiteResult.fingerprint(tests)
+    results = AfTestSuiteProgress.phase(coverage ? "coverage tests" : "functional tests", suite: MODE, workers: count) do |progress|
+      groups.each_with_index.map do |group, index|
+        path = File.join(directory, "#{index}.json")
+        File.binwrite(path, JSON.generate(group))
+        result_paths[index] = File.join(directory, "result-#{index}.json")
+        identity = {"run_id" => run_id, "suite" => MODE, "worker" => index + 1,
+                    "population_sha256" => population, "selection_sha256" => AfTestSuiteResult.fingerprint(group)}
+        expected_results[index] = identity.merge("tests" => group.length)
+        names[index] = "af-test-suite-#{MODE}-#{run_id}-worker-#{index}"
+        Thread.new(identity) do |worker_binding|
+          environment = coverage ? {
+            "AF_COVERAGE_OUTPUT" => File.join(directory, "coverage-#{index}"),
+            "AF_COVERAGE_NAME" => names.fetch(index)
+          } : {}
+          output, error, status = AfTestSuiteProgress.capture3(environment, RbConfig.ruby,
+            "-I#{$LOAD_PATH.join(File::PATH_SEPARATOR)}", "-w", __FILE__,
+            "--worker", path, result_paths.fetch(index), JSON.generate(worker_binding), "--suite", MODE,
+            *ARGV, "--seed", options.fetch(:seed).to_s, chdir: ROOT, reporter: progress, relay: false)
+          record = nil
+          begin
+            record = AfTestSuiteResult.verify_worker!(result_paths.fetch(index),
+              expected: expected_results.fetch(index), status: status)
+          rescue AfTestSuiteResult::InvalidResult => invalid
+            error += "Worker #{index + 1} test accounting differs from #{group.length} selected tests: #{invalid.message}\n"
+          end
+          outcome = record.nil? ? "invalid" : status.success? && record.values_at("failures", "errors").all?(&:zero?) ? "passed" : "failed"
+          progress.worker_finished(index + 1, outcome)
+          [record, output, error, status]
+        end
+      end.map(&:value)
+    end
+    accounting_valid = true
+    begin
+      AfTestSuiteResult.verify!(result_paths, expected: expected_results, statuses: results.map(&:last))
+    rescue AfTestSuiteResult::InvalidResult => error
+      warn "Worker terminal results invalid: #{error.message}"
+      accounting_valid = false
+    end
+    totals = [0, 0, 0, 0, 0]
+    success = accounting_valid
+    results.each_with_index do |(record, output, error, status), index|
+      success &&= status.success?
+      if record
+        record.values_at(*AfTestSuiteResult::COUNTERS).each_with_index { |value, column| totals[column] += value }
+      end
+      puts "Worker #{index + 1}:"
+      # The internal shard regex is long; retain ordinary user-facing options.
+      $stdout.write(output.sub(/^Run options:.*$/, "Run options: #{ARGV.join(' ')} --seed #{options[:seed]}"))
+      $stderr.write(error)
+    end
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    puts format("Finished in %.6fs across all workers.", elapsed)
+    puts "%d runs, %d assertions, %d failures, %d errors, %d skips" % totals
+
+    if coverage && success && totals[0] == tests.length && totals[2..3].all?(&:zero?)
+      paths = groups.each_index.map { |index| File.join(directory, "coverage-#{index}", ".resultset.json") }
+      begin
+        AfTestSuiteProgress.phase("coverage slice verification", suite: MODE) do
+          AfTestSuiteCoverage.verify!(paths, names: names, started_at: coverage_started)
+        end
+        # Collate into a new empty destination. Existing report resultsets
+        # cannot contribute hits to this invocation.
+        report = File.join(directory, "report")
+        output, error, status = AfTestSuiteProgress.capture3(RbConfig.ruby, "-r", "simplecov", "-e",
+          "SimpleCov.coverage_path = ARGV.shift; SimpleCov.collate(ARGV)", report, *paths, chdir: ROOT, phase: "coverage collation / formatting / ratchet", suite: MODE)
+        destination = File.join(ROOT, "coverage", MODE == "all" ? "full" : MODE)
+        if status.success?
+          FileUtils.mkdir_p(destination)
+          FileUtils.cp_r(Dir[File.join(report, "*"), File.join(report, ".*")].reject { |path|
+            %w[. ..].include?(File.basename(path))
+          }, destination)
+        end
+        output = output.gsub(report, destination)
+        error = error.gsub(report, destination)
+        $stdout.write(output)
+        $stderr.write(error)
+        success &&= status.success?
+      rescue AfTestSuiteCoverage::InvalidResult => e
+        warn e.message
+        success = false
+      end
+    end
+    completion&.record(workers: [results.length, count],
+      tests: accounting_valid && totals[0] == tests.length ? totals[0] : nil)
+    completion_success = success && totals[0] == tests.length && totals[2..3].all?(&:zero?)
+    if accounting_valid
+      AfTestSuiteHandoff.publish(TEST_RESULT_REQUEST, suite: MODE, totals: totals, success: completion_success)
+    end
+    exit(completion_success ? 0 : 1)
+  end
+end

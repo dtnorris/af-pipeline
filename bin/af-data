@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+ROOT=File.expand_path("..",__dir__)
+$LOAD_PATH.unshift File.join(ROOT,"lib")
+require "af_data_pipeline"
+require_relative "../lib/af_data_pipeline/private_data_root"
+
+if ARGV.first && !%w[help --help -h version --version -v evidence-lookup evidence-index-verify boundary-freeze-validate].include?(ARGV.first)
+  exit AfDataPipeline::PrivateDataRoot.run_cli { AfDataPipeline::CLI.run(ARGV) }
+end
+exit AfDataPipeline::CLI.run(ARGV)

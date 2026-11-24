@@ -1,0 +1,8 @@
+{
+  "schema_version": "af-staged-scoring-input-policy/v0.1",
+  "policy_id": "approved-new-records",
+  "policy_version": "1",
+  "scope": "operation-approved-new-records",
+  "selection": "afw-qualified-default",
+  "permissions": ["scoring_input", "workload_preparation"]
+}

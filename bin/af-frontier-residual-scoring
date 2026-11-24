@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+require "af_data_pipeline"
+require_relative "../lib/af_data_pipeline/private_data_root"
+
+if %w[prepare apply decline].include?(ARGV.first)
+  exit AfDataPipeline::PrivateDataRoot.run_cli { AfDataPipeline::FrontierResidualScoring.run(ARGV) }
+end
+exit AfDataPipeline::FrontierResidualScoring.run(ARGV)

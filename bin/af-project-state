@@ -1,0 +1,253 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "open3"
+require "optparse"
+require "shellwords"
+require "yaml"
+require_relative "../lib/af_data_pipeline/error"
+require_relative "../lib/af_data_pipeline/project_state"
+require_relative "../lib/af_data_pipeline/catalog_adoption"
+
+require_relative "../lib/af_data_pipeline/private_data_root"
+
+DEFAULT_MANIFEST = ENV["AF_PROJECT_STATE"]
+AMC_FILENAME_RE = /\A5e_Adventure_Master_Catalog_(\d+(?:\.\d+)*)\.xlsx\z/
+
+def confirm(message, default: false)
+  suffix = default ? " [Y/n] " : " [y/N] "
+  print "#{message}#{suffix}"
+  answer = $stdin.gets
+  return false if answer.nil?
+
+  value = answer.strip.downcase
+  return default if value.empty?
+
+  %w[y yes].include?(value)
+end
+
+def git!(root, *args)
+  stdout, stderr, status = Open3.capture3("git", "-C", root, *args)
+  return stdout if status.success?
+
+  detail = stderr.strip.empty? ? stdout.strip : stderr.strip
+  raise AfDataPipeline::Error, "git #{args.first} failed#{detail.empty? ? '' : ": #{detail}"}"
+end
+
+def reviewed_version!(artifact, explicit_version)
+  filename = File.basename(artifact)
+  match = AMC_FILENAME_RE.match(filename)
+  if match && explicit_version && match[1] != explicit_version
+    raise AfDataPipeline::Error,
+      "AMC filename version #{match[1]} does not match --version #{explicit_version}"
+  end
+
+  version = explicit_version || (match && match[1])
+  unless version&.match?(AfDataPipeline::ProjectState::VERSION_RE)
+    raise AfDataPipeline::Error,
+      "cannot derive AMC version from #{filename.inspect}; use --version VERSION"
+  end
+  version
+end
+
+def format_review_value(signature)
+  return "<missing header>" if signature["missing_header"]
+
+  value = signature["value"]
+  formula = signature["formula"]
+  formula ? "=#{formula} [cached #{value.inspect}]" : value.inspect
+end
+
+def print_catalog_review(review)
+  puts "Adventure Catalog review:"
+  puts "  canonical IDs: #{review.fetch('current_count')} -> #{review.fetch('candidate_count')}"
+  puts "  added IDs: #{review.fetch('added').length}"
+  review.fetch("added").each do |record|
+    puts "    + #{record.fetch('adventure_id')} #{record.fetch('title').inspect}"
+  end
+  puts "  removed IDs: #{review.fetch('removed').length}"
+  review.fetch("removed").each do |record|
+    puts "    - #{record.fetch('adventure_id')} #{record.fetch('title').inspect}"
+  end
+  puts "  changed existing IDs: #{review.fetch('changed').length}"
+  review.fetch("changed").each do |record|
+    puts "    ~ #{record.fetch('adventure_id')} #{record.fetch('title').inspect}"
+    record.fetch("fields").each do |header, change|
+      puts "      #{header}: #{format_review_value(change.fetch('before'))} -> #{format_review_value(change.fetch('after'))}"
+    end
+  end
+
+  added_headers = review.fetch("review_headers_added")
+  removed_headers = review.fetch("review_headers_removed")
+  puts "  reviewed headers added: #{added_headers.empty? ? 'none' : added_headers.join(', ')}"
+  puts "  reviewed headers removed: #{removed_headers.empty? ? 'none' : removed_headers.join(', ')}"
+end
+
+# Dispatch public project-state commands from argv and report results to stdout.
+# Usage and validation errors print a diagnostic and raise SystemExit with status 2.
+def af_project_state_main(argv = ARGV)
+command = argv.shift
+options = {manifest: DEFAULT_MANIFEST}
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: bin/af-project-state COMMAND [ROLE|AMC.xlsx] [options]"
+  opts.separator "Advance catalog_head with reviewed adoption: bin/af-project-state adopt AMC.xlsx"
+  opts.on("--manifest PATH", "Project-state manifest (or AF_PROJECT_STATE)") { |v| options[:manifest] = v }
+  opts.on("--artifact PATH", "Existing AMC artifact for promoting matcher_authorized_baseline or production_dependency_floor") { |v| options[:artifact] = v }
+  opts.on("--version VERSION", "AMC version for promote, or for adopt when the input filename is not canonical") { |v| options[:version] = v }
+  opts.on("--resume-artifact PATH", "Ingestion artifact to resume after the catalog-head commit") { |v| options[:resume_artifact] = v }
+  opts.on("-h", "--help") { puts opts; exit 0 }
+end
+
+begin
+  parser.parse!(argv)
+  unless %w[validate resolve promote adopt].include?(command)
+    warn parser
+    exit 2
+  end
+  if command == "promote" && argv.first == "catalog_head"
+    raise AfDataPipeline::Error, "catalog_head requires reviewed adoption. Use bin/af-project-state adopt AMC.xlsx [--manifest PATH] [--version VERSION]"
+  end
+  raise OptionParser::MissingArgument, "--manifest PATH (or AF_PROJECT_STATE)" if options[:manifest].to_s.strip.empty?
+
+  state = AfDataPipeline::ProjectState.new(manifest_path: options[:manifest])
+
+  case command
+  when "validate"
+    raise OptionParser::InvalidArgument, "unexpected arguments: #{argv.join(' ')}" unless argv.empty?
+    state.validate!
+    puts "Project state: PASS"
+    AfDataPipeline::ProjectState::ROLES.each do |role|
+      resolved = state.resolve(role)
+      puts "#{role}: #{resolved.version} #{resolved.filename} #{resolved.sha256}"
+    end
+  when "resolve"
+    role = argv.shift
+    raise OptionParser::MissingArgument, "ROLE" unless role
+    raise OptionParser::InvalidArgument, "unexpected arguments: #{argv.join(' ')}" unless argv.empty?
+    puts state.resolve(role).path
+  when "promote"
+    role = argv.shift
+    raise OptionParser::MissingArgument, "ROLE" unless role
+    AfDataPipeline::PrivateDataRoot.require_selected!
+    raise OptionParser::MissingArgument, "--artifact PATH" unless options[:artifact]
+    raise OptionParser::MissingArgument, "--version VERSION" unless options[:version]
+    raise OptionParser::InvalidArgument, "unexpected arguments: #{argv.join(' ')}" unless argv.empty?
+    resolved = state.promote!(role: role, artifact_path: options[:artifact], version: options[:version])
+    puts "Promoted #{resolved.name}: #{resolved.version} #{resolved.filename} #{resolved.sha256}"
+    repo_root = File.dirname(state.manifest_path)
+    manifest_name = File.basename(state.manifest_path)
+    puts
+    puts "Repository persistence required:"
+    puts "  cd #{Shellwords.escape(repo_root)}"
+    puts "  git add #{Shellwords.escape(manifest_name)} #{Shellwords.escape(resolved.filename)}"
+    puts "  git commit -m #{Shellwords.escape("Promote #{resolved.name} to AMC #{resolved.version}")}"
+    puts "  # push remains an explicit operator choice"
+  when "adopt"
+    AfDataPipeline::PrivateDataRoot.require_selected!
+    artifact_arg = argv.shift
+    raise OptionParser::MissingArgument, "AMC.xlsx" unless artifact_arg
+    raise OptionParser::InvalidArgument, "unexpected arguments: #{argv.join(' ')}" unless argv.empty?
+
+    artifact = File.expand_path(artifact_arg)
+    raise AfDataPipeline::Error, "missing AMC artifact: #{artifact}" unless File.file?(artifact)
+    raise AfDataPipeline::Error, "AMC artifact must be an .xlsx file: #{artifact}" unless File.extname(artifact).casecmp(".xlsx").zero?
+
+    resume_artifact = options[:resume_artifact] && File.expand_path(options[:resume_artifact])
+    if resume_artifact && !File.file?(resume_artifact)
+      raise AfDataPipeline::Error, "missing resume ingestion artifact: #{resume_artifact}"
+    end
+
+    version = reviewed_version!(artifact, options[:version])
+    canonical_filename = "5e_Adventure_Master_Catalog_#{version}.xlsx"
+
+    manifest = File.expand_path(options[:manifest])
+    snapshot = AfDataPipeline::CatalogAdoption.prepare!(
+      manifest_path: manifest,
+      candidate_path: artifact,
+      version:
+    )
+    state.validate!
+    repo_root = snapshot.repository_root
+    manifest_name = File.basename(manifest)
+    current = state.resolve("catalog_head")
+    destination = snapshot.destination
+    candidate_sha = snapshot.candidate.fetch("sha256")
+    candidate_bytes = snapshot.candidate.fetch("bytes")
+
+    if current.path == destination && current.sha256 == candidate_sha && current.bytes == candidate_bytes
+      puts "catalog_head already points to #{version} #{canonical_filename} #{candidate_sha}"
+      exit 0
+    end
+
+    compatibility = snapshot.compatibility
+    review = snapshot.review
+    reviewed_head = snapshot.repository_head
+
+    puts "AMC catalog-head adoption review"
+    puts "Repository: #{repo_root}"
+    puts "HEAD: #{reviewed_head[0, 12]}"
+    puts ""
+    puts "Selected artifact: #{artifact}"
+    puts "Import destination: #{destination}"
+    puts "catalog_head: #{current.version} #{current.filename}"
+    puts "          -> #{version} #{canonical_filename}"
+    puts "candidate sha256: #{candidate_sha}"
+    puts "candidate bytes: #{candidate_bytes}"
+    puts "matcher_authorized_baseline: unchanged (#{state.resolve('matcher_authorized_baseline').version})"
+    puts "production_dependency_floor: unchanged (#{state.resolve('production_dependency_floor').version})"
+    puts ""
+    print_catalog_review(review)
+    puts ""
+    puts "Cross-consumer compatibility: PASS " \
+      "(#{compatibility.fetch('canonical_adventure_count')} canonical IDs; " \
+      "#{compatibility.fetch('added_adventure_ids').length} added; layout=#{compatibility.fetch('mirror_mode')})"
+    puts "Compatibility covers ingestion/catalog, scorer catalog reads, and AFIO backlog shape; matcher baseline remains independent."
+    puts "No existing AMC artifact will be overwritten. No Git commit or push will be created."
+    puts ""
+
+    unless confirm("Import this exact workbook and promote it to catalog_head?")
+      puts "No changes made."
+      exit 0
+    end
+
+    adoption = AfDataPipeline::CatalogAdoption.adopt!(snapshot:)
+    resolved = adoption.resolved
+
+    puts "Imported: #{destination}" if adoption.imported
+    puts "Reused identical existing artifact: #{destination}" if adoption.reused
+    puts "catalog_head: #{resolved.version} #{resolved.filename} #{resolved.sha256}"
+    status = git!(repo_root, "status", "--short").rstrip
+    puts(status.empty? ? "Working tree: clean" : "Working tree:
+#{status}")
+    puts "No commit or push was performed."
+    puts
+    puts "catalog_head promoted successfully."
+    puts
+    puts "Repository persistence required:"
+    puts "  cd #{Shellwords.escape(repo_root)}"
+    stage_paths = [manifest_name]
+    workbook_status = git!(repo_root, "status", "--porcelain=v1", "--", canonical_filename).strip
+    stage_paths << canonical_filename unless workbook_status.empty?
+    puts "  git add #{stage_paths.map { |path| Shellwords.escape(path) }.join(' ')}"
+    puts "  git commit -m #{Shellwords.escape("Update catalog_head to AMC #{version}")}"
+    puts "  # push remains an explicit operator choice"
+
+    if resume_artifact
+      data_pipeline_root = File.expand_path("..", __dir__)
+      puts
+      puts "After that commit is durable, resume ingestion with:"
+      puts "  cd #{Shellwords.escape(data_pipeline_root)}"
+      puts "  #{Shellwords.escape(File.join(data_pipeline_root, 'bin', 'af-ingest-next'))} " \
+           "#{Shellwords.escape(resume_artifact)}"
+    end
+  else
+    warn parser
+    exit 2
+  end
+rescue AfDataPipeline::Error, OptionParser::ParseError => e
+  warn "ERROR: #{e.message}"
+  exit 2
+end
+end
+
+af_project_state_main if $PROGRAM_NAME == __FILE__

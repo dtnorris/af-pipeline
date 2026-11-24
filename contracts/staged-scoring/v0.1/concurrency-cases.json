@@ -1,0 +1,9 @@
+[
+  {"mutation":"unchanged", "decision":"SAFE_REUSE", "reason":"UNCHANGED"},
+  {"mutation":"unrelated", "decision":"SAFE_REUSE", "reason":"UNRELATED_SCALAR_SCORES"},
+  {"mutation":"parent", "decision":"FRESH_DECISION", "reason":"PROTECTED_RECORD_CHANGED"},
+  {"mutation":"source", "decision":"FRESH_DECISION", "reason":"PROTECTED_RECORD_CHANGED"},
+  {"mutation":"pages", "decision":"FRESH_DECISION", "reason":"PROTECTED_RECORD_CHANGED"},
+  {"mutation":"collision", "decision":"FRESH_DECISION", "reason":"ID_COLLISION"},
+  {"mutation":"structure", "decision":"UNPROVABLE", "reason":"WORKBOOK_STRUCTURE"}
+]

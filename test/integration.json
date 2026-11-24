@@ -1,0 +1,8 @@
+[
+  "test/integration/approved_source_operation_test.rb",
+  "test/integration/final_release_package_test.rb",
+  "test/integration/frontier_residual_scoring_test.rb",
+  "test/integration/public_pipeline_test.rb",
+  "test/integration/scored_release_adoption_test.rb",
+  "test/integration/standing_bulk_selection_release_test.rb"
+]

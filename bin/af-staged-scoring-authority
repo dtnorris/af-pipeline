@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../lib/af_data_pipeline"
+require_relative "../lib/af_data_pipeline/staged_scoring_authority"
+
+require_relative "../lib/af_data_pipeline/private_data_root"
+
+if ARGV.first == "issue"
+  exit AfDataPipeline::PrivateDataRoot.run_cli { AfDataPipeline::StagedScoringAuthority.run(ARGV) }
+end
+exit AfDataPipeline::StagedScoringAuthority.run(ARGV)
