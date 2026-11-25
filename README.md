@@ -38,8 +38,10 @@ this code checkout with `AF_DATA_PIPELINE_ROOT`.
   [staging contract](docs/VERIFIED_STAGED_SUCCESSOR_V0.1.md) describes the
   workbook, apply report and receipt.
 - Issue `bin/af-staged-scoring-authority` before AF Workloads compiles the
-  staged input. Review its published evidence with
-  `bin/af-data prepare-workload-review`. The
+  exact staged workbook. The [AF Workloads staged-authority contract](https://github.com/dtnorris/af-workloads/blob/6b9b1fa80cd20c24851abea6e91362767c5af3f7/docs/AFW_FORWARD_WORKLOADS.md#staged-authority)
+  describes what the compiler checks. After authorized execution, pass the AFW
+  evidence manifest and the AFW data root to `bin/af-data prepare-workload-review`
+  to build the review package. The
   [operator runbook](docs/operator-runbook.md) covers these handoffs and
   describes which artifacts must be retained for replay.
 - Use `bin/af-standing-bulk-score-release` and `bin/af-final-release-package`
@@ -54,6 +56,10 @@ The candidate and review references remain tied to the original source,
 registry, workbook, workload and evidence bytes. Exact adoption replay reports
 `ALREADY_PROMOTED` when the reviewed transition already exists. Production
 scoring and its provider configuration are separate operator-owned steps.
+
+To try storing and retrieving a single evidence member independently of the
+pipeline, follow the [public evidence walkthrough](https://github.com/dtnorris/af-evidence/blob/5e9e28dc981ddb670eddcaaf1e30357bbb152a0b/README.md#store-and-retrieve-your-first-member).
+Use the pinned components under Setup for the pipeline workflow.
 
 ## Validate
 
